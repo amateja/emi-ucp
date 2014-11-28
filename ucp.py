@@ -192,6 +192,19 @@ class UCP:
 
         return message_string
 
+    def _make_01(self, operation='', nmsg=None, amsg=None, adc='', oadc='',
+                     ac='', mt='', result='', ack='', sm='', trn='', nack=''):
+        oper = '01'
+        message = None
+        if operation == '1':
+            text = '/'.join([adc, oadc, ac, mt, nmsg or self.ia5_encode(amsg)])
+            message = '/'.join([str(self.next_trn()).zfill(2),
+                                self.data_len(text), 'O', oper, text, ''])
+        if result == '1':
+            text = '/'.join([ack or nack, sm])
+            message = '/'.join([trn.zfill(2), self.data_len(text), 'R', oper, text, ''])
+        return message + self.checksum(message)
+
     def make_02(self, fields=None):
 
         oper = "02"
@@ -280,6 +293,21 @@ class UCP:
                 message_string += self.checksum(header + self.ucpdelimiter + string + self.ucpdelimiter)
 
         return message_string
+
+    def _make_02(self, operation='', nmsg=None, amsg=None, npl='', rads='',
+                 oadc='', ac='', mt='', result='', ack='', sm='', trn='', nack='', ec=''):
+        oper = '02'
+        message = None
+        if operation == '1':
+            text = '/'.join([npl, rads, oadc, ac, mt, nmsg or self.ia5_encode(amsg)])
+            message = '/'.join([str(self.next_trn()).zfill(2),
+                                self.data_len(text), 'O', oper, text, ''])
+        if result == '1':
+            text = '/'.join([ack, sm] if ack else [nack, ec, sm])
+            message = '/'.join([trn.zfill(2), self.data_len(text), 'R', oper, text, ''])
+        return message + self.checksum(message)
+
+
 
     def make_03(self, fields=None):
 
@@ -829,29 +857,8 @@ class UCP:
 
         return message_string
 
-    def make_51(self, fields=None):
-        return self.make_5x(fields)
-
-    def make_52(self, fields=None):
-        return self.make_5x(fields)
-
-    def make_53(self, fields=None):
-        return self.make_5x(fields)
-
-    def make_54(self, fields=None):
-        return self.make_5x(fields)
-
-    def make_55(self, fields=None):
-        return self.make_5x(fields)
-
-    def make_56(self, fields=None):
-        return self.make_5x(fields)
-
-    def make_57(self, fields=None):
-        return self.make_5x(fields)
-
-    def make_58(self, fields=None):
-        return self.make_5x(fields)
+    make_51 = make_52 = make_53 = make_54 = make_55 = make_56 = make_57 = \
+        make_58 = make_5x
 
     def parse_01(self, message=None):
         mess = {}
@@ -1143,29 +1150,8 @@ class UCP:
 
         return mess
 
-    def parse_51(self, message=None):
-        return self._parse_5x(message)
-
-    def parse_52(self, message=None):
-        return self._parse_5x(message)
-
-    def parse_53(self, message=None):
-        return self._parse_5x(message)
-
-    def parse_54(self, message=None):
-        return self._parse_5x(message)
-
-    def parse_55(self, message=None):
-        return self._parse_5x(message)
-
-    def parse_56(self, message=None):
-        return self._parse_5x(message)
-
-    def parse_57(self, message=None):
-        return self._parse_5x(message)
-
-    def parse_58(self, message=None):
-        return self._parse_5x(message)
+    parse_51 = parse_52 = parse_53 = parse_54 = parse_55 = parse_56 = \
+        parse_57 = parse_58 = _parse_5x
 
     def pack(self, msg=None):
         """add stx and etx to ucp message"""
@@ -1200,52 +1186,36 @@ class UCP:
             '7F': '0xe0',
         }
 
-    def ia5_decode(self, text=None):
-        "Docodifica una stringhe IA5, ritorna una stringa vuota se il testo e' nullo"
+    @staticmethod
+    def ia5_decode(text=None):
+        """IA5 string decoding returns empty string if text is None
 
-        out = ''
-        if text is not None:
-            out = text.decode('hex')
+        TODO :: accented characters ::
 
-        ####################################
-        # TODO :: accented characters ::
-        #
-        #            p = re.compile("..")
-        #            iter = p.iterator(text)
-        #
-        #            for m in iter:
-        #                oct = str(m.group())
-        #                if m in self.accent_table:
-        #                    out += "%s" % chr(hex(self.accent_table(oct)))
-        #                else:
-        #                    out += "%s" % chr(hex(oct))
+        p = re.compile("..")
+        iter = p.iterator(text)
 
-        return out
+        for m in iter:
+            oct = str(m.group())
+            if m in self.accent_table:
+                out += "%s" % chr(hex(self.accent_table(oct)))
+            else:
+                out += "%s" % chr(hex(oct))
+        """
+        return '' if text is None else text.decode('hex')
 
-    def ia5_encode(self, text=None):
-        "Codifica stringhe in IA5, ritorna stringa vuota se il testo e' nullo"
-        # encode and decode built-in....
-        out = ''
-        if text is not None:
-            out = text.encode('hex').upper()
-        return out
+    @staticmethod
+    def ia5_encode(text=None):
+        """IA5 string encoding returns empty string if text is None"""
+        return '' if text is None else text.encode('hex').upper()
 
-    def checksum(self, text=None):
-        val = 0
-        cksum = 0
+    @staticmethod
+    def checksum(text=None):
+        return 0 if text is None else "%02X" % (sum(map(ord, text)) % 256)
 
-        if text is not None:
-            for i in text[:]: val += ord(i)
-
-        cksum = "%02X" % (val % 256)
-        return cksum
-
-    def data_len(self, text=None):
-        leng = 0
-        if text is not None:
-            leng = len(text) + 17
-
-        return str(leng).zfill(5)
+    @staticmethod
+    def data_len(text=None):
+        return str(0 if text is None else len(text) + 17).zfill(5)
 
     def next_trn(self):
         if self.trn_number < 99:
@@ -1258,14 +1228,11 @@ class UCP:
     def reset_trn(self):
         self.trn_number = 0
 
-    def encode_7bit(self, text=None):
-        if text is not None:
-            return text.encode("utf_7").encode("hex").upper()
-        else:
-            return "00"
+    @staticmethod
+    def encode_7bit(text=None):
+        return '00' if text is None else text.encode('utf_7').encode(
+            'hex').upper()
 
-    def decode_7bit(self, text=None):
-        if text is not None:
-            return text.decode("hex").decode("utf_7")
-        else:
-            return ''
+    @staticmethod
+    def decode_7bit(text=None):
+        return '' if text is None else text.decode('hex').decode('utf_7')
