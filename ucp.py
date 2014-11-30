@@ -2,12 +2,6 @@
 #
 # Net-UCP version - 1.0
 #
-#CONTACTS
-#
-# Web   : http://www.nemux.org
-# Email : nemux <at> nemux.org
-# Key   : http://www.nemux.org/keys/nemux.asc
-#
 ###############################################################################
 
 import socket
@@ -94,6 +88,7 @@ class UCP:
     def __init__(self, args=None):
         """ Accept smsc_host and smsc_port """
         self.__set_common_value()
+        self.trn_number = 0
 
         if args is not None:
             self.socket = DataTransport(args)
@@ -202,7 +197,8 @@ class UCP:
                                 self.data_len(text), 'O', oper, text, ''])
         if result == '1':
             text = '/'.join([ack or nack, sm])
-            message = '/'.join([trn.zfill(2), self.data_len(text), 'R', oper, text, ''])
+            message = '/'.join([trn.zfill(2), self.data_len(text), 'R', oper,
+                                text, ''])
         return message + self.checksum(message)
 
     def make_02(self, fields=None):
@@ -279,7 +275,7 @@ class UCP:
                 if 'ec' in fields:
                     string += fields["ec"]
                 else:
-                    string += ''.self.ucpdelimiter
+                    string += '' + self.ucpdelimiter
 
                 if 'sm' in fields:
                     string += fields["sm"]
@@ -295,19 +291,20 @@ class UCP:
         return message_string
 
     def _make_02(self, operation='', nmsg=None, amsg=None, npl='', rads='',
-                 oadc='', ac='', mt='', result='', ack='', sm='', trn='', nack='', ec=''):
+                 oadc='', ac='', mt='', result='', ack='', sm='', trn='',
+                 nack='', ec=''):
         oper = '02'
         message = None
         if operation == '1':
-            text = '/'.join([npl, rads, oadc, ac, mt, nmsg or self.ia5_encode(amsg)])
+            text = '/'.join([npl, rads, oadc, ac, mt, nmsg or
+                             self.ia5_encode(amsg)])
             message = '/'.join([str(self.next_trn()).zfill(2),
                                 self.data_len(text), 'O', oper, text, ''])
         if result == '1':
             text = '/'.join([ack, sm] if ack else [nack, ec, sm])
-            message = '/'.join([trn.zfill(2), self.data_len(text), 'R', oper, text, ''])
+            message = '/'.join([trn.zfill(2), self.data_len(text), 'R', oper,
+                                text, ''])
         return message + self.checksum(message)
-
-
 
     def make_03(self, fields=None):
 
@@ -433,7 +430,7 @@ class UCP:
                 if 'ec' in fields:
                     string += fields["ec"]
                 else:
-                    string += ''.self.ucpdelimiter
+                    string += '' + self.ucpdelimiter
 
                 if 'sm' in fields:
                     string += fields["sm"]
@@ -447,6 +444,23 @@ class UCP:
                 message_string += self.checksum(header + self.ucpdelimiter + string + self.ucpdelimiter)
 
         return message_string
+
+    def _make_03(self, operation='', nmsg=None, amsg=None, rad='', oadc='',
+                 ac='', npl='', gas='', rp='', pr='', lpr='', ur='', lur='',
+                 rc='', lrc='', dd='', ddt='', mt='', result='', ack='', sm='',
+                 trn='', nack='', ec=''):
+        oper = '02'
+        message = None
+        if operation == '1':
+            text = '/'.join([rad, oadc, ac, npl, gas, rp, pr, lpr, ur, lur, rc,
+                             lrc, dd, ddt, mt, nmsg or self.ia5_encode(amsg)])
+            message = '/'.join([str(self.next_trn()).zfill(2),
+                                self.data_len(text), 'O', oper, text, ''])
+        if result == '1':
+            text = '/'.join([ack, sm] if ack else [nack, ec, sm])
+            message = '/'.join([trn.zfill(2), self.data_len(text), 'R', oper,
+                                text, ''])
+        return message + self.checksum(message)
 
     def make_30(self, fields=None):
 
@@ -541,7 +555,7 @@ class UCP:
                 if 'ec' in fields:
                     string += fields["ec"]
                 else:
-                    string += ''.self.ucpdelimiter
+                    string += '' + self.ucpdelimiter
 
                 if 'sm' in fields:
                     string += fields["sm"]
@@ -561,6 +575,22 @@ class UCP:
         message_string += self.checksum(header + self.ucpdelimiter + string + self.ucpdelimiter)
 
         return message_string
+
+    def _make_30(self, operation='', amsg=None, adc='', oadc='', ac='', nrq='',
+                 nad='', npid='', dd='', ddt='', vp='', result='', ack='',
+                 mvp='', sm='', trn='', nack='', ec=''):
+        oper = '30'
+        message = None
+        if operation == '1':
+            text = '/'.join([adc, oadc, ac, nrq, nad, npid, dd, ddt, vp,
+                             self.ia5_encode(amsg)])
+            message = '/'.join([str(self.next_trn()).zfill(2),
+                                self.data_len(text), 'O', oper, text, ''])
+        if result == '1':
+            text = '/'.join([ack, mvp, sm] if ack else [nack, ec, sm])
+            message = '/'.join([trn.zfill(2), self.data_len(text), 'R', oper,
+                                text, ''])
+        return message + self.checksum(message)
 
     def make_31(self, fields=None):
 
@@ -626,6 +656,20 @@ class UCP:
         message_string += self.checksum(header + self.ucpdelimiter + string + self.ucpdelimiter)
 
         return message_string
+
+    def _make_31(self, operation='', adc='', pid='', result='', ack='', sm='',
+                  trn='', nack='', ec=''):
+        oper = '31'
+        message = None
+        if operation == '1':
+            text = '/'.join([adc, pid])
+            message = '/'.join([str(self.next_trn()).zfill(2),
+                                self.data_len(text), 'O', oper, text, ''])
+        if result == '1':
+            text = '/'.join([ack, sm] if ack else [nack, ec, sm])
+            message = '/'.join([trn.zfill(2), self.data_len(text), 'R', oper,
+                                text, ''])
+        return message + self.checksum(message)
 
     def make_5x(self, fields=None):
 
@@ -857,6 +901,31 @@ class UCP:
 
         return message_string
 
+    def _make_5x(self, op, operation='', nmsg=None, amsg=None, tmsg=None,
+                 otoa='', oadc='', adc='', ac='', nrq='', nadc='', nt='',
+                 npid='', lrq='', lrad='', lpid='', dd='', vp='', rpid='',
+                 scts='', dst='', rsn='', dscts='', mt='', nb='', mms='', pr='',
+                 dcs='', mcls='', rpi='', cpg='', rply='', hplmn='', xser='',
+                 res4='', res5='', result='', ack='', mvp='', sm='', trn='',
+                 nack='', ec=''):
+        oper = op
+        message = None
+        if operation == '1':
+            text = '/'.join([adc,
+                             self.encode_7bit(oadc) if otoa == '5039' else otoa,
+                             ac, nrq, nadc, nt, npid, lrq, lrad, lpid, dd, vp,
+                             rpid, scts, dst, rsn, dscts, mt, nb,
+                             self.ia5_encode(amsg) or nmsg or tmsg, mms, pr,
+                             dcs, mcls, rpi, cpg, rply, otoa, hplmn, xser, res4,
+                             res5])
+            message = '/'.join([str(self.next_trn()).zfill(2),
+                                self.data_len(text), 'O', oper, text, ''])
+        if result == '1':
+            text = '/'.join([ack, mvp, sm] if ack else [nack, ec, sm])
+            message = '/'.join([trn.zfill(2), self.data_len(text), 'R', oper,
+                                text, ''])
+        return message + self.checksum(message)
+
     make_51 = make_52 = make_53 = make_54 = make_55 = make_56 = make_57 = \
         make_58 = make_5x
 
@@ -865,7 +934,6 @@ class UCP:
 
         if message is not None:
             params = message.split(self.ucpdelimiter)
-            #print str(params)
 
             mess["trn"] = params[0]
             mess["len"] = params[1]
@@ -908,7 +976,6 @@ class UCP:
 
         if message is not None:
             params = message.split(self.ucpdelimiter)
-            #print str(params)
 
             mess["trn"] = params[0]
             mess["len"] = params[1]
@@ -954,7 +1021,6 @@ class UCP:
 
         if message is not None:
             params = message.split(self.ucpdelimiter)
-            #print str(params)
 
             mess["trn"] = params[0]
             mess["len"] = params[1]
@@ -1009,7 +1075,6 @@ class UCP:
 
         if message is not None:
             params = message.split(self.ucpdelimiter)
-            #print str(params)
 
             mess["trn"] = params[0]
             mess["len"] = params[1]
@@ -1048,7 +1113,6 @@ class UCP:
 
         if message is not None:
             params = message.split(self.ucpdelimiter)
-            #print str(params)
 
             mess["trn"] = params[0]
             mess["len"] = params[1]
@@ -1079,7 +1143,6 @@ class UCP:
 
         if message is not None:
             params = message.split(self.ucpdelimiter)
-            #print str(params)
 
             mess["trn"] = params[0]
             mess["len"] = params[1]
