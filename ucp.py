@@ -7,6 +7,235 @@
 import socket
 import signal
 
+STX = chr(2)
+ETX = chr(3)
+O = 'O'
+R = 'R'
+A = 'A'
+N = 'N'
+SEP = '/'
+
+
+class FrameMalformed(BaseException):
+    pass
+
+
+class Trn:
+    class __Trn:
+        def __init__(self):
+            self.val = -1
+
+    instance = None
+
+    def __init__(self):
+        if not Trn.instance:
+            Trn.instance = Trn.__Trn()
+
+    def next(self):
+        self.instance.val = (self.instance.val + 1) % 100
+        return self.instance.val
+
+
+class Message:
+    TRN = Trn()
+    msg = ''
+
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def checksum(text):
+        return sum(map(ord, text)) % 256
+
+    @staticmethod
+    def encode_7bit(text):
+        return text.encode('utf_7').encode('hex').upper()
+
+    @staticmethod
+    def decode_7bit(text):
+        return text.decode('hex').decode('utf_7')
+
+    @staticmethod
+    def ia5_decode(text):
+        return text.decode('hex')
+
+    @staticmethod
+    def ia5_encode(text):
+        return text.encode('hex').upper()
+
+    @staticmethod
+    def data_len(*args):
+        return len(args) + sum(map(len, args)) + 16
+
+    @classmethod
+    def from_string(cls, msg):
+        return cls()
+
+    @staticmethod
+    def unpack(msg, x):
+        if msg[0] == STX and msg[-1] == ETX:
+            msg = msg[1:-1]
+        else:
+            raise FrameMalformed('Start or stop character missing.')
+        ln = len(msg)
+        msg = msg.split(SEP)
+        t_ln = int(msg[1])
+        if t_ln != ln:
+            raise FrameMalformed('Message is %d long, but %d declared. %s'
+                                 % (ln, t_ln, msg[3]))
+        if x != O and x != R:
+            raise ValueError('Message can be either operation or response.')
+
+        if x != msg[2]:
+            raise FrameMalformed('Message is not a %s.' % 'operation' if x == O
+                                 else 'response')
+        t_checksum = int(msg[-1], 16)
+        if t_checksum != Message.checksum(SEP.join(msg[:-1]) + SEP):
+            raise FrameMalformed('Checksum does not comply.')
+
+        t_trn = int(msg[0])
+        t_ot = int(msg[3])
+        if t_ot not in (1, 2, 3, 30, 31, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+                        60, 61):
+            raise TypeError('Wrong operation type.')
+        return msg[4:-1], t_trn, t_ot
+
+
+class Response(Message):
+    def __init__(self, ot, ack, trn=None, mvp_ec='', sm=''):
+        Message.__init__(self)
+
+        self.ot = ot
+        self.ack = ack
+        self.trn = self.TRN.next() if trn is None else trn
+        self.mvp_ec = mvp_ec
+        self.sm = sm
+
+    def __str__(self):
+        if self.ack == A and self.ot in (1, 2, 3, 31, 60, 61):
+            ln = self.data_len(self.ack, self.sm)
+            text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/{}/{}/'.format(
+                self.trn, ln, R, self.ot, self.ack, self.sm)
+        else:
+            ln = self.data_len(self.ack, self.mvp_ec, self.sm)
+            text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/{}/{}/{}/'.format(
+                self.trn, ln, R, self.ot, self.ack, self.mvp_ec, self.sm)
+        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+
+    @classmethod
+    def from_string(cls, msg):
+        msg, trn, ot = cls.unpack(msg, R)
+        ack = msg[0]
+        mvp_ec = '' if ack == A and ot in (1, 2, 3, 31, 60, 61) else msg[1]
+        return cls(ot, ack, trn, mvp_ec, msg[-1])
+
+
+class Request5x(Message):
+    def __init__(self, ot, trn=None, adc='', oadc='', ac='', nrq='', nadc='',
+                 nt='', npid='', lrq='', lrad='', lpid='', dd='', ddt='', vp='',
+                 rpid='', scts='', dst='', rsn='', dscts='', mt='', nb='',
+                 xmsg='', mms='', pr='', dcs='', mcls='', rpi='', cpg='',
+                 rply='', otoa='', hplmn='', xser=''):
+        Message.__init__(self)
+        self.trn = self.TRN.next() if trn is None else int(trn)
+        self.ot = int(ot)
+        self.adc = adc
+        self.oadc = self.decode_7bit(oadc) if otoa == '5039' else oadc
+        self.ac = ac
+        self.nrg = nrq
+        self.nadc = nadc
+        self.nt = nt
+        self.npid = npid
+        self.lrq = lrq
+        self.lrad = lrad
+        self.lpid = lpid
+        self.dd = dd
+        self.ddt = ddt
+        self.vp = vp
+        self.rpid = rpid
+        self.scts = scts
+        self.dst = dst
+        self.rsn = rsn
+        self.dscts = dscts
+        self.mt = '' if mt == '' else int(mt)
+        self.nb = nb
+        self.xmsg = xmsg if self.mt == 2 else self.ia5_decode(xmsg)
+        self.mms = mms
+        self.pr = pr
+        self.dcs = dcs
+        self.mcls = mcls
+        self.rpi = rpi
+        self.cpg = cpg
+        self.rply = rply
+        self.otoa = otoa
+        self.hplmn = hplmn
+        self.xser = xser
+
+    def __str__(self):
+        msg = self.xmsg if self.mt == 2 else self.ia5_encode(self.xmsg)
+        ln = self.data_len(
+            self.adc, self.oadc, self.ac, self.nrg, self.nadc, self.nt,
+            self.npid, self.lrq, self.lrad, self.lpid, self.dd, self.ddt,
+            self.vp, self.rpid, self.scts, self.dst, self.rsn, self.dscts,
+            str(self.mt), self.nb, msg, self.mms, self.pr, self.dcs, self.mcls,
+            self.rpi, self.cpg, self.rply, self.otoa, self.hplmn, self.xser, '',
+            '')
+        text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
+               '{}/{}/{}/{}/{}/{}/{}/{}/{}/{}/' \
+               '{}/{}/{}/{}/{}/{}/{}/{}/{}/{}/' \
+               '{}/{}/{}/{}/{}/{}/{}/{}/{}/{}/' \
+               '{}///'.format(
+                   self.trn, ln, O, self.ot,
+                   self.adc, self.oadc, self.ac, self.nrg, self.nadc, self.nt,
+                   self.npid, self.lrq, self.lrad, self.lpid, self.dd, self.ddt,
+                   self.vp, self.rpid, self.scts, self.dst, self.rsn, self.dscts,
+                   self.mt, self.nb, msg, self.mms, self.pr, self.dcs, self.mcls,
+                   self.rpi, self.cpg, self.rply, self.otoa, self.hplmn, self.xser)
+        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+
+    @classmethod
+    def from_string(cls, msg):
+        msg, trn, ot = cls.unpack(msg, O)
+        return cls(ot, trn, *msg[:-2])
+
+
+class Request6x(Message):
+    def __init__(self, ot, trn=None, oadc='', oton='', onpi='', styp='', pwd='',
+                 npwd='', vers='', ladc='', lton='', lnpi='', opid=''):
+        Message.__init__(self)
+        self.trn = self.TRN.next() if trn is None else int(trn)
+        self.ot = int(ot)
+        self.oadc = oadc
+        self.oton = oton
+        self.onpi = onpi
+        self.styp = styp
+        self.pwd = self.ia5_decode(pwd)
+        self.npwd = self.ia5_decode(npwd)
+        self.vers = vers
+        self.ladc = ladc
+        self.lton = lton
+        self.lnpi = lnpi
+        self.opid = opid
+
+    def __str__(self):
+        pwd = self.ia5_encode(self.pwd)
+        npwd = self.ia5_encode(self.npwd)
+        ln = self.data_len(
+            self.oadc, self.oton, self.onpi, self.styp, pwd, npwd,
+            self.vers, self.ladc, self.lton, self.lnpi, self.opid, '')
+        text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
+               '{}/{}/{}/{}/{}/{}/{}/{}/{}/{}/' \
+               '{}//'.format(
+                   self.trn, ln, O, self.ot,
+                   self.oadc, self.oton, self.onpi, self.styp, pwd, npwd,
+                   self.vers, self.ladc, self.lton, self.lnpi, self.opid)
+        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+
+    @classmethod
+    def from_string(cls, msg):
+        msg, trn, ot = cls.unpack(msg, O)
+        return cls(ot, trn, *msg[:-1])
+
 
 class DataTransport:
     def __init__(self, args=None):
