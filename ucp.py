@@ -1,12 +1,11 @@
 ###############################################################################
 #
-# Net-UCP version - 1.0
+# UCP version - 1.0
 #
 ###############################################################################
 
 import socket
 import signal
-import re
 
 
 class DataTransport:
@@ -100,14 +99,11 @@ class UCP:
             print "No operation defined"
 
     def dispatch_make(self, r_op, r_ucpfields):
-        method_name = 'make_' + str(r_op)
         try:
-            method = getattr(self, method_name)
+            return getattr(self, 'make_' + str(r_op))(**r_ucpfields)
         except:
             print "Operation %s not supported" % r_op
             return None
-
-        return method(r_ucpfields)
 
     def make_01(self, fields=None):
 
@@ -188,7 +184,7 @@ class UCP:
         return message_string
 
     def _make_01(self, operation='', nmsg=None, amsg=None, adc='', oadc='',
-                     ac='', mt='', result='', ack='', sm='', trn='', nack=''):
+                 ac='', mt='', result='', ack='', sm='', trn='', nack=''):
         oper = '01'
         message = None
         if operation == '1':
@@ -658,7 +654,7 @@ class UCP:
         return message_string
 
     def _make_31(self, operation='', adc='', pid='', result='', ack='', sm='',
-                  trn='', nack='', ec=''):
+                 trn='', nack='', ec=''):
         oper = '31'
         message = None
         if operation == '1':
@@ -1216,29 +1212,20 @@ class UCP:
     parse_51 = parse_52 = parse_53 = parse_54 = parse_55 = parse_56 = \
         parse_57 = parse_58 = _parse_5x
 
-    def pack(self, msg=None):
+    @staticmethod
+    def pack(msg=None):
         """add stx and etx to ucp message"""
-        if msg is not None:
-            msg = self.stx + msg + self.etx
+        return chr(2) + msg + chr(3) if msg else None
 
-        return msg
-
-    def unpack(self, msg=None):
+    @staticmethod
+    def unpack(msg=None):
         """remove stx and etx from ucp message"""
-        if msg is not None:
-            pattern = re.compile('(^' + self.stx + ')|(' + self.etx + '$)')
-            msg = pattern.sub('', msg, 2)
-
-        return msg
+        return msg.lstrip(chr(2)).rstrip(chr(3)) if msg else None
 
     def __set_common_value(self):
         self.ucpdelimiter = "/"
-        self.stx = chr(2)
-        self.etx = chr(3)
         self.ack = "A"
         self.nack = "N"
-
-        self.reset_trn()
 
         self.accent_table = {
             '05': '0xe8',
@@ -1284,12 +1271,9 @@ class UCP:
         if self.trn_number < 99:
             self.trn_number += 1
         else:
-            self.reset_trn()
+            self.trn_number = 0
 
         return self.trn_number
-
-    def reset_trn(self):
-        self.trn_number = 0
 
     @staticmethod
     def encode_7bit(text=None):
