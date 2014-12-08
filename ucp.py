@@ -4,8 +4,9 @@
 #
 ###############################################################################
 
+import threading
 import socket
-import signal
+import Queue
 
 STX = chr(2)
 ETX = chr(3)
@@ -65,7 +66,7 @@ class Message:
 
     @staticmethod
     def data_len(*args):
-        return len(args) + sum(map(len, args)) + 16
+        return len(args) + sum(map(len, map(str, args))) + 16
 
     @classmethod
     def from_string(cls, msg):
@@ -130,6 +131,150 @@ class Response(Message):
         return cls(ot, ack, trn, mvp_ec, msg[-1])
 
 
+class Request01(Message):
+    def __init__(self, ot, trn=None, adc='', oadc='', ac='', mt='', xmsg=''):
+        Message.__init__(self)
+        self.trn = self.TRN.next() if trn is None else int(trn)
+        self.ot = int(ot)
+        self.adc = adc
+        self.oadc = oadc
+        self.ac = ac
+        self.mt = int(mt)
+        self.xmsg = self.ia5_decode(xmsg) if self.mt == 3 else xmsg
+
+    def __str__(self):
+        msg = self.ia5_encode(self.xmsg) if self.mt == 3 else self.xmsg
+        ln = self.data_len(self.adc, self.oadc, self.ac, self.mt, msg)
+        text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
+               '{}/{}/{}/{}/{}/'.format(
+                   self.trn, ln, O, self.ot,
+                   self.adc, self.oadc, self.ac, self.mt, msg)
+        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+
+    @classmethod
+    def from_string(cls, msg):
+        msg, trn, ot = cls.unpack(msg, O)
+        return cls(ot, trn, *msg)
+
+
+class Request02(Message):
+    def __init__(self, ot, trn=None, npl='', rads='', oadc='', ac='', mt='',
+                 xmsg=''):
+        Message.__init__(self)
+        self.trn = self.TRN.next() if trn is None else int(trn)
+        self.ot = int(ot)
+        self.npl = int(npl)
+        self.rads = rads
+        self.oadc = oadc
+        self.ac = ac
+        self.mt = int(mt)
+        self.xmsg = self.ia5_decode(xmsg) if self.mt == 3 else xmsg
+
+    def __str__(self):
+        msg = self.ia5_encode(self.xmsg) if self.mt == 3 else self.xmsg
+        rads = SEP.join(self.rads)
+        ln = self.data_len(self.npl, rads, self.oadc, self.ac, self.mt, msg)
+        text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
+               '{}/{}/{}/{}/{}/{}/'.format(
+                   self.trn, ln, O, self.ot,
+                   self.npl, rads, self.oadc, self.ac, self.mt, msg)
+        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+
+    @classmethod
+    def from_string(cls, msg):
+        msg, trn, ot = cls.unpack(msg, O)
+        msg = [msg[0], msg[1:-4]] + msg[-4:]
+        return cls(ot, trn, *msg)
+
+
+class Request03(Message):
+    def __init__(self, ot, trn=None, rad='', oadc='', ac='', dd='', ddt='',
+                 mt='', xmsg=''):
+        Message.__init__(self)
+        self.trn = self.TRN.next() if trn is None else int(trn)
+        self.ot = int(ot)
+        self.rad = rad
+        self.oadc = oadc
+        self.ac = ac
+        self.dd = dd
+        self.ddt = ddt
+        self.mt = int(mt)
+        self.xmsg = self.ia5_decode(xmsg) if self.mt == 3 else xmsg
+
+    def __str__(self):
+        msg = self.ia5_encode(self.xmsg) if self.mt == 3 else self.xmsg
+        ln = self.data_len(self.rad, self.oadc, self.ac, self.dd, self.ddt,
+                           self.mt, msg) + 9
+        text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
+               '{}/{}/{}/0////////{}/{}/{}/{}/'.format(
+                   self.trn, ln, O, self.ot,
+                   self.rad, self.oadc, self.ac, self.dd, self.ddt, self.mt,
+                   msg)
+        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+
+    @classmethod
+    def from_string(cls, msg):
+        msg, trn, ot = cls.unpack(msg, O)
+        msg = msg[:3] + msg[-4:]
+        return cls(ot, trn, *msg)
+
+
+class Request30(Message):
+    def __init__(self, ot, trn=None, adc='', oadc='', ac='', nrq='', nad='',
+                 npid='', dd='', ddt='', vp='', amsg=''):
+        Message.__init__(self)
+        self.trn = self.TRN.next() if trn is None else int(trn)
+        self.ot = int(ot)
+        self.adc = adc
+        self.oadc = oadc
+        self.ac = ac
+        self.nrq = nrq
+        self.nad = nad
+        self.npid = npid
+        self.dd = dd
+        self.ddt = ddt
+        self.vp = vp
+        self.amsg = self.ia5_decode(amsg)
+
+    def __str__(self):
+        msg = self.ia5_encode(self.amsg)
+        ln = self.data_len(self.adc, self.oadc, self.ac, self.nrq, self.nad,
+                           self.npid, self.dd, self.ddt, self.vp, msg)
+        text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
+               '{}/{}/{}/{}/{}/{}/{}/{}/{}/{}/'.format(
+                   self.trn, ln, O, self.ot,
+                   self.adc, self.oadc, self.ac, self.nrq, self.nad, self.npid,
+                   self.dd, self.ddt, self.vp, msg)
+        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+
+    @classmethod
+    def from_string(cls, msg):
+        msg, trn, ot = cls.unpack(msg, O)
+        return cls(ot, trn, *msg)
+
+
+class Request31(Message):
+    def __init__(self, ot, trn=None, adc='', pid=''):
+        Message.__init__(self)
+        self.trn = self.TRN.next() if trn is None else int(trn)
+        self.ot = int(ot)
+        self.adc = adc
+        self.pid = pid
+
+    def __str__(self):
+        ln = self.data_len(self.adc, self.pid)
+        text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
+               '{}/{}/'.format(
+                   self.trn, ln, O, self.ot,
+                   self.adc, self.pid)
+        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+
+    @classmethod
+    def from_string(cls, msg):
+        msg, trn, ot = cls.unpack(msg, O)
+        return cls(ot, trn, *msg)
+
+
 class Request5x(Message):
     def __init__(self, ot, trn=None, adc='', oadc='', ac='', nrq='', nadc='',
                  nt='', npid='', lrq='', lrad='', lpid='', dd='', ddt='', vp='',
@@ -177,7 +322,7 @@ class Request5x(Message):
             self.adc, self.oadc, self.ac, self.nrg, self.nadc, self.nt,
             self.npid, self.lrq, self.lrad, self.lpid, self.dd, self.ddt,
             self.vp, self.rpid, self.scts, self.dst, self.rsn, self.dscts,
-            str(self.mt), self.nb, msg, self.mms, self.pr, self.dcs, self.mcls,
+            self.mt, self.nb, msg, self.mms, self.pr, self.dcs, self.mcls,
             self.rpi, self.cpg, self.rply, self.otoa, self.hplmn, self.xser, '',
             '')
         text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
@@ -206,16 +351,16 @@ class Request6x(Message):
         self.trn = self.TRN.next() if trn is None else int(trn)
         self.ot = int(ot)
         self.oadc = oadc
-        self.oton = oton
-        self.onpi = onpi
-        self.styp = styp
+        self.oton = oton  # 1 2 6 ''
+        self.onpi = onpi  # 1 3 5 ''
+        self.styp = styp  # 1 2 3 4 5 6
         self.pwd = self.ia5_decode(pwd)
         self.npwd = self.ia5_decode(npwd)
-        self.vers = vers
+        self.vers = vers  # 0100
         self.ladc = ladc
-        self.lton = lton
-        self.lnpi = lnpi
-        self.opid = opid
+        self.lton = lton  # 1 2 ''
+        self.lnpi = lnpi  # 1 3 5 ''
+        self.opid = opid  # 00 39 ''
 
     def __str__(self):
         pwd = self.ia5_encode(self.pwd)
@@ -237,79 +382,108 @@ class Request6x(Message):
         return cls(ot, trn, *msg[:-1])
 
 
-class DataTransport:
-    def __init__(self, args=None):
-        self.ucpinfo = {
-            'smsc_host': None,
-            'smsc_port': None,
-            'timeout': None,
-        }
+class DataTransport(object):
+    def __init__(self, host, port, timeout=3):
+        self.conn = self._Connection(host, port, timeout)
+        self.incoming = Queue.Queue()
+        self.outgoing = Queue.Queue()
+        self.flag = threading.Event()
+        self.sender = self.Worker(self.conn, self.outgoing, self.flag, True)
+        self.receiver = self.Worker(self.conn, self.incoming, self.flag, True)
+        self.receiver.start()
+        self.sender.start()
 
-        if args is not None:
-            self.ucpinfo.update(args)
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        else:
-            raise RuntimeError("DataTransport: smsc host, smsc port")
+    def send(self, msg):
+        self.outgoing.put(str(msg))
 
-    def connect(self):
-        """ return None on error """
+    def receive(self):
         try:
-            self.sock.connect((self.ucpinfo["smsc_host"], self.ucpinfo["smsc_port"]))
-        except:
+            return self.incoming.get_nowait()
+        except Queue.Empty:
             return None
-        return 1
 
-    def disconnect(self):
-        """ return None on error """
-        try:
-            self.sock.close()
-        except:
-            return None
-        return 1
+    def quit(self):
+        self.flag.set()
+        self.conn.disconnect()
+        self.sender.join()
+        self.receiver.join()
 
-    def send(self, ucpkt=None):
-        if ucpkt is not None:
-            totalsent = 0
+    class Worker(threading.Thread):
+        def __init__(self, conn, queue, flag, out):
+            threading.Thread.__init__(self)
+            self.conn = conn
+            self.queue = queue
+            self.flag = flag
+            self.run = self.send if out else self.receive
 
-            while totalsent < len(ucpkt):
+        def send(self):
+            while not self.flag.is_set():
                 try:
-                    sent = self.sock.send(ucpkt[totalsent:])
-                except:
-                    raise IOError("Unable to send...")
-                if sent == 0:
-                    raise RuntimeError("transmit: connection broken!")
-                totalsent = totalsent + sent
+                    msg = self.queue.get(timeout=1)
+                except Queue.Empty:
+                    pass
+                else:
+                    send = self.conn.send(msg)
+                    if not send:
+                        self.queue.put(msg)
 
-    def thandler(self, signal, frame):
-        raise IOError("\n[*] Timeout reached! signal %s\n" % signal)
+        def receive(self):
+            buff = ''
+            while not self.flag.is_set():
+                try:
+                    msg = self.conn.receive()
+                except socket.timeout:
+                    pass
+                else:
+                    if msg is not None:
+                        buff += msg
+                        sid = 0
+                        try:
+                            while True:
+                                eid = buff.index(ETX, sid) + 1
+                                self.queue.put(buff[sid:eid])
+                                sid = eid
+                        except ValueError:
+                            buff = buff[sid:]
 
-    def read(self):
-        etx = chr(3)
-        max_len = 2048
+    class _Connection:
+        def __init__(self, host, port, timeout):
+            self.server_address = host, port
+            self.timeout = timeout
+            self._reconnect()
 
-        chunk = ''
-        remote_msg = ''
-        timeout = 10  # 10 seconds
+        def _reconnect(self):
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.connect(self.server_address)
+            try:
+                self.socket.settimeout(self.timeout)
+            except:
+                pass
 
-        if self.ucpinfo["timeout"] is not None:
-            timeout = self.ucpinfo["timeout"]
+        def send(self, msg):
+            try:
+                nob = self.socket.sendall(msg)
+            except socket.error:
+                self._reconnect()
+                return False
+            if not nob:
+                self._reconnect()
+                return False
+            return True
 
-        signal.signal(signal.SIGALRM, self.thandler)
-        signal.alarm(timeout)
+        def receive(self):
+            try:
+                msg = self.socket.recv(4096)
+            except socket.error:
+                self._reconnect()
+                return None
+            if not msg:
+                self._reconnect()
+                return None
+            return msg
 
-        while chunk != etx:
-            chunk = self.sock.recv(1)
-            if chunk == '':
-                signal.alarm(0)
-                raise RuntimeError("read: connection broken!")
-
-            remote_msg = remote_msg + chunk
-            if len(remote_msg) >= max_len:
-                signal.alarm(0)
-                raise RuntimeError("read: ucp message too long")
-
-        signal.alarm(0)
-        return remote_msg
+        def disconnect(self):
+            self.socket.close()
 
 
 class UCP:

@@ -1,6 +1,8 @@
+import socket
+import time
 import unittest
 
-from ucp import Response, Request5x, Request6x
+from ucp import *
 
 
 class TestMessage(unittest.TestCase):
@@ -37,6 +39,35 @@ class TestMessage(unittest.TestCase):
         '\x0200/00022/R/60/N/01//04\x03',
         '\x0200/00019/R/61/A//6E\x03',
         '\x0200/00022/R/61/N/02//06\x03',
+    ]
+
+    req01 = [
+        '\x0200/00070/O/01/01234567890/09876543210//3/53686F7274204D65737361676'
+        '5/D9\x03',
+        '\x0200/00041/O/01/0888444///2/716436383334/C5\x03',
+    ]
+
+    req02 = [
+        '\x0205/00059/O/02/3/01111/02222/03333/0123456789//3/534D5343/52\x03',
+        '\x0217/00069/O/02/5/01111/02222/03333/04444/05555/0123456789//2/563444'
+        '/44\x03',
+    ]
+
+    req03 = [
+        '\x0215/00058/O/03/01234568/0756663/2435/0//////////3/434D47/1B\x03',
+        '\x0222/00067/O/03/01234568/0756663//0////////1/0602961500/2/89123334/C'
+        'F\x03',
+    ]
+
+    req30 = [
+        '\x0256/00089/O/30/0123456/0568243//1/0296877842/0139////454D4920737065'
+        '63696669636174696F6E/D4\x03',
+        '\x0244/00077/O/30/0673845336//////1/1003961344/1203961200/4D6573736167'
+        '65204F4B/27\x03',
+    ]
+
+    req31 = [
+        '\x0202/00035/O/31/0234765439845/0139/A0\x03',
     ]
 
     req5x = [
@@ -82,6 +113,56 @@ class TestMessage(unittest.TestCase):
         for r in self.req6x:
             self.assertEqual(r, str(Request6x.from_string(r)))
 
+    def test_req31(self):
+        for r in self.req31:
+            self.assertEqual(r, str(Request31.from_string(r)))
+
+    def test_req30(self):
+        for r in self.req30:
+            self.assertEqual(r, str(Request30.from_string(r)))
+
+    def test_req01(self):
+        for r in self.req01:
+            self.assertEqual(r, str(Request01.from_string(r)))
+
+    def test_req02(self):
+        for r in self.req02:
+            self.assertEqual(r, str(Request02.from_string(r)))
+
+    def test_req03(self):
+        for r in self.req03:
+            self.assertEqual(r, str(Request03.from_string(r)))
+
+
+class TestTransport(unittest.TestCase):
+    def test_dt(self):
+        dt = DataTransport('localhost', 10000)
+        dt.send('TEST')
+        time.sleep(1)
+        self.assertEqual('TEST', ucp_server.result)
+        dt.quit()
+
+
+class UCPServer(threading.Thread):
+    def __init__(self, event):
+
+        threading.Thread.__init__(self)
+        self.event = event
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.bind(('localhost', 10000))
+        self.sock.listen(1)
+        self.result = None
+
+    def run(self):
+        connection, client_address = self.sock.accept()
+        self.result = connection.recv(4096)
+        while not self.event:
+            pass
 
 if __name__ == '__main__':
+    event = threading.Event()
+    ucp_server = UCPServer(event)
+    ucp_server.start()
     unittest.main()
+    event.set()
+    ucp_server.join()
