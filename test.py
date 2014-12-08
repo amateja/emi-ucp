@@ -149,6 +149,7 @@ class UCPServer(threading.Thread):
         threading.Thread.__init__(self)
         self.event = event
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind(('localhost', 10000))
         self.sock.listen(1)
         self.result = None

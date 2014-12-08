@@ -455,10 +455,7 @@ class DataTransport(object):
         def _reconnect(self):
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect(self.server_address)
-            try:
-                self.socket.settimeout(self.timeout)
-            except:
-                pass
+            self.socket.settimeout(self.timeout)
 
         def send(self, msg):
             try:
@@ -466,10 +463,10 @@ class DataTransport(object):
             except socket.error:
                 self._reconnect()
                 return False
-            if not nob:
-                self._reconnect()
-                return False
-            return True
+            if nob is None:
+                return True
+            self._reconnect()
+            return False
 
         def receive(self):
             try:
