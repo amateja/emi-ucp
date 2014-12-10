@@ -1,5 +1,3 @@
-import socket
-import time
 import unittest
 
 from ucp import *
@@ -137,33 +135,36 @@ class TestMessage(unittest.TestCase):
 class TestTransport(unittest.TestCase):
     def test_dt(self):
         dt = DataTransport('localhost', 10000)
-        dt.send('TEST')
-        time.sleep(1)
-        self.assertEqual('TEST', ucp_server.result)
+        msg = '\x02TEST\x03'
+        dt.send(msg)
+        result = None
+        while True:
+            result = dt.receive()
+            if result is not None:
+                break
+        self.assertEqual(msg, result)
         dt.quit()
+        event.set()
 
 
 class UCPServer(threading.Thread):
-    def __init__(self, event):
-
+    def __init__(self):
         threading.Thread.__init__(self)
-        self.event = event
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.bind(('localhost', 10000))
-        self.sock.listen(1)
-        self.result = None
 
     def run(self):
-        connection, client_address = self.sock.accept()
-        self.result = connection.recv(4096)
-        while not self.event:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(('localhost', 10000))
+        sock.listen(1)
+        connection, client_address = sock.accept()
+        result = connection.recv(4096)
+        connection.sendall(result)
+        while not event.isSet():
             pass
 
 if __name__ == '__main__':
     event = threading.Event()
-    ucp_server = UCPServer(event)
+    ucp_server = UCPServer()
     ucp_server.start()
     unittest.main()
-    event.set()
     ucp_server.join()

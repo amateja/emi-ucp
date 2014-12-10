@@ -389,7 +389,7 @@ class DataTransport(object):
         self.outgoing = Queue.Queue()
         self.flag = threading.Event()
         self.sender = self.Worker(self.conn, self.outgoing, self.flag, True)
-        self.receiver = self.Worker(self.conn, self.incoming, self.flag, True)
+        self.receiver = self.Worker(self.conn, self.incoming, self.flag, False)
         self.receiver.start()
         self.sender.start()
 
@@ -430,21 +430,17 @@ class DataTransport(object):
         def receive(self):
             buff = ''
             while not self.flag.is_set():
-                try:
-                    msg = self.conn.receive()
-                except socket.timeout:
-                    pass
-                else:
-                    if msg is not None:
-                        buff += msg
-                        sid = 0
-                        try:
-                            while True:
-                                eid = buff.index(ETX, sid) + 1
-                                self.queue.put(buff[sid:eid])
-                                sid = eid
-                        except ValueError:
-                            buff = buff[sid:]
+                msg = self.conn.receive()
+                if msg is not None:
+                    buff += msg
+                    sid = 0
+                    try:
+                        while True:
+                            eid = buff.index(ETX, sid) + 1
+                            self.queue.put(buff[sid:eid])
+                            sid = eid
+                    except ValueError:
+                        buff = buff[sid:]
 
     class _Connection:
         def __init__(self, host, port, timeout):
@@ -471,6 +467,8 @@ class DataTransport(object):
         def receive(self):
             try:
                 msg = self.socket.recv(4096)
+            except socket.timeout:
+                return None
             except socket.error:
                 self._reconnect()
                 return None
