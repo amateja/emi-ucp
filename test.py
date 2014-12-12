@@ -156,9 +156,13 @@ class UCPServer(threading.Thread):
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(('localhost', 10000))
         sock.listen(1)
-        connection, client_address = sock.accept()
-        result = connection.recv(4096)
-        connection.sendall(result)
+        sock.settimeout(3)
+        try:
+            connection, client_address = sock.accept()
+            result = connection.recv(4096)
+            connection.sendall(result)
+        except socket.timeout:
+            event.set()
         while not event.isSet():
             pass
 
