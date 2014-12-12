@@ -52,7 +52,28 @@ class Message:
 
     @staticmethod
     def encode_7bit(text):
-        return text.encode('utf_7').encode('hex').upper()
+        """
+        :type message: str
+
+        :return: str
+        """
+        text += '\x00'
+        msgl = len(text) * 7 / 8
+        op = [-1] * msgl
+        c = shift = 0
+
+        for n in range(msgl):
+            if shift == 6:
+                c += 1
+
+            shift = n % 7
+            lb = ord(text[c]) >> shift
+            hb = (ord(text[c + 1]) << (7 - shift) & 255)
+            op[n] = lb + hb
+            c += 1
+
+        result = ''.join(map(chr, op)).encode('hex').upper()
+        return chr(len(result)).encode('hex').upper() + result
 
     @staticmethod
     def decode_7bit(text):
