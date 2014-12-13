@@ -147,6 +147,13 @@ class TestTransport(unittest.TestCase):
         event.set()
 
 
+class TestCoders(unittest.TestCase):
+    def test_bit7(self):
+        msg = 'ALPHA@NUM'
+        self.assertEqual(msg.encode('ira').encode('bits7'),
+                         '10412614190438AB4D')
+
+
 class UCPServer(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)

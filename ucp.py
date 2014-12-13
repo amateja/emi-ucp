@@ -4,7 +4,7 @@
 #
 ###############################################################################
 
-import ira
+from utils import ira, bits7
 
 import threading
 import socket
@@ -49,35 +49,6 @@ class Message:
     @staticmethod
     def checksum(text):
         return sum(map(ord, text)) % 256
-
-    @staticmethod
-    def encode_7bit(text):
-        """
-        :type message: str
-
-        :return: str
-        """
-        text += '\x00'
-        msgl = len(text) * 7 / 8
-        op = [-1] * msgl
-        c = shift = 0
-
-        for n in range(msgl):
-            if shift == 6:
-                c += 1
-
-            shift = n % 7
-            lb = ord(text[c]) >> shift
-            hb = (ord(text[c + 1]) << (7 - shift) & 255)
-            op[n] = lb + hb
-            c += 1
-
-        result = ''.join(map(chr, op)).encode('hex').upper()
-        return chr(len(result)).encode('hex').upper() + result
-
-    @staticmethod
-    def decode_7bit(text):
-        return text.decode('hex').decode('utf_7')
 
     @staticmethod
     def data_len(*args):
@@ -300,7 +271,7 @@ class Request5x(Message):
         self.trn = self.TRN.next() if trn is None else int(trn)
         self.ot = int(ot)
         self.adc = adc
-        self.oadc = self.decode_7bit(oadc) if otoa == '5039' else oadc
+        self.oadc = oadc.decode('bit7') if otoa == '5039' else oadc
         self.ac = ac
         self.nrq = nrq
         self.nadc = nadc
@@ -341,6 +312,7 @@ class Request5x(Message):
         self.xser = xser
 
     def __str__(self):
+        oadc = self.oadc.encode('bit7') if self.otoa == '5039' else self.oadc
         if self.mt == 2:
             msg = self.xmsg
         elif self.mt == 3:
@@ -348,7 +320,7 @@ class Request5x(Message):
         else:
             msg = self.xmsg.encode('hex').upper()
         ln = self.data_len(
-            self.adc, self.oadc, self.ac, self.nrq, self.nadc, self.nt,
+            self.adc, oadc, self.ac, self.nrq, self.nadc, self.nt,
             self.npid, self.lrq, self.lrad, self.lpid, self.dd, self.ddt,
             self.vp, self.rpid, self.scts, self.dst, self.rsn, self.dscts,
             self.mt, self.nb, msg, self.mms, self.pr, self.dcs, self.mcls,
@@ -360,7 +332,7 @@ class Request5x(Message):
                '{}/{}/{}/{}/{}/{}/{}/{}/{}/{}/' \
                '{}///'.format(
                    self.trn, ln, O, self.ot,
-                   self.adc, self.oadc, self.ac, self.nrq, self.nadc, self.nt,
+                   self.adc, oadc, self.ac, self.nrq, self.nadc, self.nt,
                    self.npid, self.lrq, self.lrad, self.lpid, self.dd, self.ddt,
                    self.vp, self.rpid, self.scts, self.dst, self.rsn, self.dscts,
                    self.mt, self.nb, msg, self.mms, self.pr, self.dcs, self.mcls,
