@@ -207,7 +207,7 @@ class Request03(Message):
 
 class Request30(Message):
     def __init__(self, ot, trn=None, adc='', oadc='', ac='', nrq='', nad='',
-                 npid='', dd='', ddt='', vp='', amsg=''):
+                 npid='', dd='', ddt='', vp='', amsg='', encoded=True):
         Message.__init__(self)
         self.trn = self.TRN.next() if trn is None else int(trn)
         self.ot = int(ot)
@@ -220,7 +220,7 @@ class Request30(Message):
         self.dd = dd
         self.ddt = ddt
         self.vp = vp
-        self.amsg = amsg.decode('irahex')
+        self.amsg = amsg.decode('irahex') if encoded else amsg
 
     def __str__(self):
         msg = self.amsg.encode('irahex')
@@ -262,20 +262,32 @@ class Request31(Message):
 
 
 class Request5x(Message):
-    def __init__(self, ot, trn=None, adc='', oadc='', ac='', nrq='', nadc='',
-                 nt='', npid='', lrq='', lrad='', lpid='', dd='', ddt='', vp='',
-                 rpid='', scts='', dst='', rsn='', dscts='', mt='', nb='',
-                 xmsg='', mms='', pr='', dcs='', mcls='', rpi='', cpg='',
-                 rply='', otoa='', hplmn='', xser=''):
+    def __init__(self, ot, trn=None, adc='', oadc='', ac='', nrq=None, nadc='',
+                 nt=None, npid='', lrq='', lrad='', lpid='', dd='', ddt='',
+                 vp='', rpid='', scts='', dst='', rsn='', dscts='', mt=None,
+                 nb='', xmsg='', mms='', pr='', dcs='', mcls='', rpi='', cpg='',
+                 rply='', otoa='', hplmn='', xser='', encoded=True):
         Message.__init__(self)
         self.trn = self.TRN.next() if trn is None else int(trn)
         self.ot = int(ot)
         self.adc = adc
-        self.oadc = oadc.decode('bit7') if otoa == '5039' else oadc
+        if encoded and otoa == '5039':
+            self.oadc = oadc.decode('bits7')
+        else:
+            self.oadc = oadc
         self.ac = ac
-        self.nrq = nrq
+        try:
+            self.nrq = int(nrq)
+        except TypeError:
+            self.nrq = ''
         self.nadc = nadc
-        self.nt = nt
+        try:
+            self.nt = int(nt)
+        except TypeError:
+            self.nt = ''
+        else:
+            if self.nt > 7:
+                raise ValueError('Parameter nt should be in range 0 - 7.')
         self.npid = npid
         self.lrq = lrq
         self.lrad = lrad
@@ -288,18 +300,26 @@ class Request5x(Message):
         self.dst = dst
         self.rsn = rsn
         self.dscts = dscts
+        try:
+            self.mt = int(mt)
+        except TypeError:
+            self.nt = ''
+        else:
+            if self.mt < 2 or self.mt > 4:
+                raise ValueError('Parameter mt should be in range 2 - 4.')
         self.mt = '' if mt == '' else int(mt)
         self.nb = nb
-        if self.mt == 2:
-            self.xmsg = xmsg
-        elif self.mt == 3:
-            self.xmsg = xmsg.decode('irahex')
-        elif self.mt == 4:
-            self.xmsg = xmsg.decode('hex')
-        elif self.mt == '':
-            self.xmsg = ''
+        if encoded:
+            if self.mt == 2:
+                self.xmsg = xmsg
+            elif self.mt == 3:
+                self.xmsg = xmsg.decode('irahex')
+            elif self.mt == 4:
+                self.xmsg = xmsg.decode('hex')
+            elif self.mt == '':
+                self.xmsg = ''
         else:
-            raise FrameMalformed('Unknown MT.')
+            self.xmsg = xmsg
         self.mms = mms
         self.pr = pr
         self.dcs = dcs
@@ -312,7 +332,7 @@ class Request5x(Message):
         self.xser = xser
 
     def __str__(self):
-        oadc = self.oadc.encode('bit7') if self.otoa == '5039' else self.oadc
+        oadc = self.oadc.encode('bits7') if self.otoa == '5039' else self.oadc
         if self.mt == 2:
             msg = self.xmsg
         elif self.mt == 3:
@@ -322,9 +342,10 @@ class Request5x(Message):
         ln = self.data_len(
             self.adc, oadc, self.ac, self.nrq, self.nadc, self.nt,
             self.npid, self.lrq, self.lrad, self.lpid, self.dd, self.ddt,
-            self.vp, self.rpid, self.scts, self.dst, self.rsn, self.dscts,
-            self.mt, self.nb, msg, self.mms, self.pr, self.dcs, self.mcls,
-            self.rpi, self.cpg, self.rply, self.otoa, self.hplmn, self.xser, '',
+            self.vp, self.rpid, self.scts, self.dst, self.rsn,
+            self.dscts, self.mt, self.nb, msg, self.mms, self.pr,
+            self.dcs, self.mcls, self.rpi, self.cpg, self.rply,
+            self.otoa, self.hplmn, self.xser, '',
             '')
         text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
                '{}/{}/{}/{}/{}/{}/{}/{}/{}/{}/' \
@@ -334,9 +355,10 @@ class Request5x(Message):
                    self.trn, ln, O, self.ot,
                    self.adc, oadc, self.ac, self.nrq, self.nadc, self.nt,
                    self.npid, self.lrq, self.lrad, self.lpid, self.dd, self.ddt,
-                   self.vp, self.rpid, self.scts, self.dst, self.rsn, self.dscts,
-                   self.mt, self.nb, msg, self.mms, self.pr, self.dcs, self.mcls,
-                   self.rpi, self.cpg, self.rply, self.otoa, self.hplmn, self.xser)
+                   self.vp, self.rpid, self.scts, self.dst, self.rsn,
+                   self.dscts, self.mt, self.nb, msg, self.mms, self.pr,
+                   self.dcs, self.mcls, self.rpi, self.cpg, self.rply,
+                   self.otoa, self.hplmn, self.xser)
         return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
 
     @classmethod
@@ -347,7 +369,8 @@ class Request5x(Message):
 
 class Request6x(Message):
     def __init__(self, ot, trn=None, oadc='', oton='', onpi='', styp='', pwd='',
-                 npwd='', vers='', ladc='', lton='', lnpi='', opid=''):
+                 npwd='', vers='', ladc='', lton='', lnpi='', opid='',
+                 encoded=True):
         Message.__init__(self)
         self.trn = self.TRN.next() if trn is None else int(trn)
         self.ot = int(ot)
@@ -355,8 +378,12 @@ class Request6x(Message):
         self.oton = oton  # 1 2 6 ''
         self.onpi = onpi  # 1 3 5 ''
         self.styp = styp  # 1 2 3 4 5 6
-        self.pwd = pwd.decode('irahex')
-        self.npwd = npwd.decode('irahex')
+        if encoded:
+            self.pwd = pwd.decode('irahex')
+            self.npwd = npwd.decode('irahex')
+        else:
+            self.pwd = pwd
+            self.npwd = npwd
         self.vers = vers  # 0100
         self.ladc = ladc
         self.lton = lton  # 1 2 ''
@@ -480,3 +507,39 @@ class DataTransport(object):
 
         def disconnect(self):
             self.socket.close()
+
+
+def send_message(sender, to, message, notification=False):
+    params = {'ot': 51, 'mt': 3, 'adc': to, 'xmsg': message, 'encoded': False}
+    if notification:
+        params.update({'nrq': 1, 'nt': 1})
+    if not sender.isdigit():
+        params.update({'otoa': '5039', 'oadc': sender})
+    return Request5x(**params)
+
+
+_mapper = {
+    1: Request01,
+    2: Request02,
+    3: Request03,
+    30: Request30,
+    31: Request31,
+    50: Request5x,
+    51: Request5x,
+    52: Request5x,
+    53: Request5x,
+    54: Request5x,
+    55: Request5x,
+    56: Request5x,
+    57: Request5x,
+    58: Request5x,
+    59: Request5x,
+    60: Request6x,
+    61: Request6x
+}
+
+
+def dispatcher(msg):
+    if msg[10] == 'R':
+        return Response.from_string(msg)
+    return _mapper[int(msg[12:14])].from_string(msg)
