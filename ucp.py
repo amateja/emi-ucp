@@ -7,6 +7,7 @@
 from utils import ira, bits7
 
 import threading
+import types
 import socket
 import Queue
 
@@ -87,6 +88,15 @@ class Message:
             raise TypeError('Wrong operation type.')
         return msg[4:-1], t_trn, t_ot
 
+    def fields(self):
+        for i in dir(self):
+            y = getattr(self, i)
+            if i.startswith('__') or y == '' \
+                    or isinstance(y, (types.InstanceType,
+                                      types.FunctionType, types.MethodType)):
+                continue
+            print i, ':', y
+
 
 class Response(Message):
     def __init__(self, ot, ack, trn=None, mvp_ec='', sm=''):
@@ -118,7 +128,7 @@ class Response(Message):
 
 
 class Request01(Message):
-    def __init__(self, ot, trn=None, adc='', oadc='', ac='', mt='', xmsg=''):
+    def __init__(self, ot=1, trn=None, adc='', oadc='', ac='', mt='', xmsg=''):
         Message.__init__(self)
         self.trn = self.TRN.next() if trn is None else int(trn)
         self.ot = int(ot)
@@ -144,7 +154,7 @@ class Request01(Message):
 
 
 class Request02(Message):
-    def __init__(self, ot, trn=None, npl='', rads='', oadc='', ac='', mt='',
+    def __init__(self, ot=2, trn=None, npl='', rads='', oadc='', ac='', mt='',
                  xmsg=''):
         Message.__init__(self)
         self.trn = self.TRN.next() if trn is None else int(trn)
@@ -174,7 +184,7 @@ class Request02(Message):
 
 
 class Request03(Message):
-    def __init__(self, ot, trn=None, rad='', oadc='', ac='', dd='', ddt='',
+    def __init__(self, ot=3, trn=None, rad='', oadc='', ac='', dd='', ddt='',
                  mt='', xmsg=''):
         Message.__init__(self)
         self.trn = self.TRN.next() if trn is None else int(trn)
@@ -206,7 +216,7 @@ class Request03(Message):
 
 
 class Request30(Message):
-    def __init__(self, ot, trn=None, adc='', oadc='', ac='', nrq='', nad='',
+    def __init__(self, ot=30, trn=None, adc='', oadc='', ac='', nrq='', nad='',
                  npid='', dd='', ddt='', vp='', amsg='', encoded=True):
         Message.__init__(self)
         self.trn = self.TRN.next() if trn is None else int(trn)
@@ -240,7 +250,7 @@ class Request30(Message):
 
 
 class Request31(Message):
-    def __init__(self, ot, trn=None, adc='', pid=''):
+    def __init__(self, ot=31, trn=None, adc='', pid=''):
         Message.__init__(self)
         self.trn = self.TRN.next() if trn is None else int(trn)
         self.ot = int(ot)
@@ -278,12 +288,12 @@ class Request5x(Message):
         self.ac = ac
         try:
             self.nrq = int(nrq)
-        except TypeError:
+        except (ValueError, TypeError):
             self.nrq = ''
         self.nadc = nadc
         try:
             self.nt = int(nt)
-        except TypeError:
+        except (ValueError, TypeError):
             self.nt = ''
         else:
             if self.nt > 7:
@@ -302,7 +312,7 @@ class Request5x(Message):
         self.dscts = dscts
         try:
             self.mt = int(mt)
-        except TypeError:
+        except (ValueError, TypeError):
             self.nt = ''
         else:
             if self.mt < 2 or self.mt > 4:
@@ -381,10 +391,11 @@ class Request6x(Message):
         if encoded:
             self.pwd = pwd.decode('irahex')
             self.npwd = npwd.decode('irahex')
+            self.vers = int(vers, 2)
         else:
             self.pwd = pwd
             self.npwd = npwd
-        self.vers = vers  # 0100
+            self.vers = int(vers)
         self.ladc = ladc
         self.lton = lton  # 1 2 ''
         self.lnpi = lnpi  # 1 3 5 ''
@@ -393,15 +404,16 @@ class Request6x(Message):
     def __str__(self):
         pwd = self.pwd.encode('irahex')
         npwd = self.npwd.encode('irahex')
+        vers = '{:0>4b}'.format(self.vers)
         ln = self.data_len(
             self.oadc, self.oton, self.onpi, self.styp, pwd, npwd,
-            self.vers, self.ladc, self.lton, self.lnpi, self.opid, '')
+            vers, self.ladc, self.lton, self.lnpi, self.opid, '')
         text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
                '{}/{}/{}/{}/{}/{}/{}/{}/{}/{}/' \
                '{}//'.format(
                    self.trn, ln, O, self.ot,
                    self.oadc, self.oton, self.onpi, self.styp, pwd, npwd,
-                   self.vers, self.ladc, self.lton, self.lnpi, self.opid)
+                   vers, self.ladc, self.lton, self.lnpi, self.opid)
         return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
 
     @classmethod
