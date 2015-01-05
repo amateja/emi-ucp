@@ -131,10 +131,15 @@ class TestMessage(unittest.TestCase):
         for r in self.req03:
             self.assertEqual(r, str(Request03.from_string(r)))
 
+    def test_dispatcher(self):
+        for r in self.req01 + self.req02 + self.req03 + self.req30 + \
+                self.req31 + self.req5x + self.req6x + self.rsp:
+            self.assertEqual(r, str(dispatcher(r)))
+
 
 class TestTransport(unittest.TestCase):
     def test_dt(self):
-        dt = DataTransport('localhost', 10000)
+        dt = DataTransport('localhost', 10000, 1)
         msg = '\x02TEST\x03'
         dt.send(msg)
         result = None
