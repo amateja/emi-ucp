@@ -283,8 +283,13 @@ class Request5x(Message):
         self.adc = adc
         if encoded and otoa == '5039':
             self.oadc = oadc.decode('bits7')
+            self.otoa = otoa
         else:
             self.oadc = oadc
+            if not self.oadc.isdigit():
+                self.otoa = '5039'
+            else:
+                self.otoa = otoa
         self.ac = ac
         try:
             self.nrq = int(nrq)
@@ -337,18 +342,28 @@ class Request5x(Message):
         self.rpi = rpi
         self.cpg = cpg
         self.rply = rply
-        self.otoa = otoa
         self.hplmn = hplmn
         self.xser = xser
 
     def __str__(self):
         oadc = self.oadc.encode('bits7') if self.otoa == '5039' else self.oadc
+        try:
+            str(self.xmsg)
+        except UnicodeEncodeError:
+            self.mt = 4
+            self.xser = '020108'
         if self.mt == 2:
             msg = self.xmsg
         elif self.mt == 3:
             msg = self.xmsg.encode('irahex')
         else:
-            msg = self.xmsg.encode('hex').upper()
+            if self.xser == '020108':
+                msg = self.xmsg.encode('utf-16')
+                self.nb = len(msg) * 8
+                msg = msg.encode('hex').upper()
+            else:
+                self.nb = len(self.xmsg)
+                msg = self.xmsg.encode('hex').upper()
         ln = self.data_len(
             self.adc, oadc, self.ac, self.nrq, self.nadc, self.nt,
             self.npid, self.lrq, self.lrad, self.lpid, self.dd, self.ddt,
@@ -522,11 +537,10 @@ class DataTransport(object):
 
 
 def send_message(sender, to, message, notification=False):
-    params = {'ot': 51, 'mt': 3, 'adc': to, 'xmsg': message, 'encoded': False}
+    params = {'ot': 51, 'mt': 3, 'adc': to, 'xmsg': message, 'oadc': sender,
+              'encoded': False}
     if notification:
         params.update({'nrq': 1, 'nt': 1})
-    if not sender.isdigit():
-        params.update({'otoa': '5039', 'oadc': sender})
     return Request5x(**params)
 
 
