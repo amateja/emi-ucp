@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import unittest
 
 from ucp import *
@@ -99,6 +100,26 @@ class TestMessage(unittest.TestCase):
         '\x0200/00058/O/61/04568768///2///0100/1920870340094000//5///06\x03',
     ]
 
+    basic51 = '\x0200/00083/O/51/012345/09876//1//1/////////////3//4D6573736' \
+              '16765203531/////////////D1\x03'
+    malformed = [
+        '\x0300/00083/O/51/012345/09876//1//1/////////////3//4D657373616765203'
+        '531/////////////D1\x03',
+        '\x0200/00084/O/51/012345/09876//1//1/////////////3//4D657373616765203'
+        '531/////////////D1\x03',
+        '\x0200/00083/R/51/012345/09876//1//1/////////////3//4D657373616765203'
+        '531/////////////D1\x03',
+        '\x0200/00083/O/51/012345/09876//1//1/////////////3//4D657373616765203'
+        '531/////////////D2\x03',
+        '\x0200/00083/O/91/012345/09876//1//1/////////////3//4D657373616765203'
+        '531/////////////D5\x03',
+    ]
+    utf16 = '\x0200/00077/O/51/012345/09876/////////////////4/32/FFFEC485///' \
+            '///////020108///DA\x03'
+    mt2 = '\x0200/00061/O/51/012345/09876/////////////////2///////////////46' \
+          '\x03'
+    request6x = '\x0200/00052/O/60/09876/6/5/1/736563726574//0100//////E4\x03'
+
     def test_rsp(self):
         for r in self.rsp:
             self.assertEqual(r, str(Response.from_string(r)))
@@ -136,6 +157,48 @@ class TestMessage(unittest.TestCase):
                 self.req31 + self.req5x + self.req6x + self.rsp:
             self.assertEqual(r, str(dispatcher(r)))
 
+    def test_fields(self):
+        m = Request5x.from_string(self.req5x[0])
+        n = Request5x(encoded=False, **m.fields())
+        self.assertEqual(str(m), str(n))
+
+    def test_send_message(self):
+        self.assertEqual(
+            str(send_message('09876', '012345', 'Message 51', True)),
+            self.basic51)
+
+    def test_unpack_exceptions(self):
+        for r in self.malformed:
+            self.assertRaises(ValueError, Message.unpack, r, O)
+        self.assertRaises(ValueError, Message.unpack, self.basic51, 'X')
+
+    def test_Request5x_exceptions(self):
+        self.assertRaises(ValueError, Request5x, **{
+            'trn': 0, 'oadc': '08F4F29C0E', 'mt': 3, 'adc': '012345',
+            'xmsg': 'Message 51', 'ot': 51, 'otoa': '5039', 'nt': '8'})
+        self.assertRaises(ValueError, Request5x, **{
+            'trn': 0, 'oadc': '08F4F29C0E', 'mt': 1, 'adc': '012345',
+            'xmsg': 'Message 51', 'ot': 51, 'otoa': '5039'})
+
+    def test_Request5x_utf16(self):
+        self.assertEqual(
+            self.utf16,
+            str(Request5x(ot=51, trn=0, adc='012345', oadc='09876', mt=4,
+                          xmsg=u'\u85c4', encoded=False)))
+
+    def test_Request5x_mt2(self):
+        self.assertEqual(
+            self.mt2,
+            str(Request5x(ot=51, trn=0, adc='012345', oadc='09876', mt=2,
+                          xmsg='', encoded=False)))
+
+    def test_request6x(self):
+        self.assertEqual(
+            self.request6x,
+            str(Request6x(60, trn=0, oadc='09876', oton=6, onpi=5, styp=1,
+                          pwd='secret', vers=4, encoded=False))
+        )
+
 
 class TestTransport(unittest.TestCase):
     def test_dt(self):
@@ -153,10 +216,34 @@ class TestTransport(unittest.TestCase):
 
 
 class TestCoders(unittest.TestCase):
-    def test_bit7(self):
+    def test_encode(self):
         msg = 'ALPHA@NUM'
-        self.assertEqual(msg.encode('ira').encode('bits7'),
-                         '10412614190438AB4D')
+        self.assertEqual(encode_bits7(encode_ira(msg)), '10412614190438AB4D')
+
+    def test_decode(self):
+        msg = '10412614190438AB4D'
+        self.assertEqual(decode_ira(decode_bits7(msg)), 'ALPHA@NUM')
+
+    def test_encode_ira_invalid(self):
+        self.assertRaises(UnicodeError, encode_ira, 'ą')
+
+    def test_decode_ira_extended(self):
+        self.assertEqual(decode_ira('\x1be'), '€')
+
+    def test_decode_ira_extended_invalid(self):
+        self.assertRaises(UnicodeError, decode_ira, '\x1bf')
+
+    def test_decode_bits7_chr8(self):
+        self.assertEqual(decode_bits7('0E61F1985C369F01'), 'abcdefg')
+
+    def test_encode_hex_bytes(self):
+        self.assertEqual(encode_hex(b'test'), '74657374')
+
+    def test_encode_hex_utf8(self):
+        self.assertEqual(encode_hex('€'), 'E282AC')
+
+    def test_decode_hex_bytes(self):
+        self.assertEqual(decode_hex(b'E282AC'), u'€')
 
 
 class UCPServer(threading.Thread):
@@ -177,6 +264,7 @@ class UCPServer(threading.Thread):
             event.set()
         while not event.isSet():
             pass
+
 
 if __name__ == '__main__':
     event = threading.Event()

@@ -1,5 +1,0 @@
-include MANIFEST.in
-include LICENSE
-include Changelog
-include Makefile
-recursive-include examples *.py

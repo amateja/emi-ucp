@@ -1,15 +1,12 @@
-###############################################################################
-#
-# UCP version - 1.0
-#
-###############################################################################
-
-from utils import ira, bits7
-
+import socket
 import threading
 import types
-import socket
-import Queue
+
+from .utils import *
+try:
+    import Queue as queue
+except ImportError:
+    import queue
 
 STX = chr(2)
 ETX = chr(3)
@@ -20,12 +17,12 @@ N = 'N'
 SEP = '/'
 
 
-class FrameMalformed(BaseException):
+class FrameMalformed(ValueError):
     pass
 
 
-class Trn:
-    class __Trn:
+class Trn(object):
+    class __Trn(object):
         def __init__(self):
             self.val = -1
 
@@ -40,12 +37,9 @@ class Trn:
         return self.instance.val
 
 
-class Message:
+class Message(object):
     TRN = Trn()
     msg = ''
-
-    def __init__(self):
-        pass
 
     @staticmethod
     def checksum(text):
@@ -54,10 +48,6 @@ class Message:
     @staticmethod
     def data_len(*args):
         return len(args) + sum(map(len, map(str, args))) + 16
-
-    @classmethod
-    def from_string(cls, msg):
-        return cls()
 
     @staticmethod
     def unpack(msg, x):
@@ -85,17 +75,18 @@ class Message:
         t_ot = int(msg[3])
         if t_ot not in (1, 2, 3, 30, 31, 51, 52, 53, 54, 55, 56, 57, 58, 59,
                         60, 61):
-            raise TypeError('Wrong operation type.')
+            raise ValueError('Wrong operation type.')
         return msg[4:-1], t_trn, t_ot
 
     def fields(self):
+        result = {}
         for i in dir(self):
             y = getattr(self, i)
-            if i.startswith('__') or y == '' \
-                    or isinstance(y, (types.InstanceType,
-                                      types.FunctionType, types.MethodType)):
+            if i.startswith('__') or y == '' or \
+                    isinstance(y, (Trn, types.FunctionType, types.MethodType)):
                 continue
-            print i, ':', y
+            result[i] = y
+        return result
 
 
 class Response(Message):
@@ -136,10 +127,10 @@ class Request01(Message):
         self.oadc = oadc
         self.ac = ac
         self.mt = int(mt)
-        self.xmsg = xmsg.decode('irahex') if self.mt == 3 else xmsg
+        self.xmsg = decode_irahex(xmsg) if self.mt == 3 else xmsg
 
     def __str__(self):
-        msg = self.xmsg.encode('irahex') if self.mt == 3 else self.xmsg
+        msg = encode_irahex(self.xmsg) if self.mt == 3 else self.xmsg
         ln = self.data_len(self.adc, self.oadc, self.ac, self.mt, msg)
         text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
                '{}/{}/{}/{}/{}/'.format(
@@ -164,10 +155,10 @@ class Request02(Message):
         self.oadc = oadc
         self.ac = ac
         self.mt = int(mt)
-        self.xmsg = xmsg.decode('irahex') if self.mt == 3 else xmsg
+        self.xmsg = decode_irahex(xmsg) if self.mt == 3 else xmsg
 
     def __str__(self):
-        msg = self.xmsg.encode('irahex') if self.mt == 3 else self.xmsg
+        msg = encode_irahex(self.xmsg) if self.mt == 3 else self.xmsg
         rads = SEP.join(self.rads)
         ln = self.data_len(self.npl, rads, self.oadc, self.ac, self.mt, msg)
         text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
@@ -195,10 +186,10 @@ class Request03(Message):
         self.dd = dd
         self.ddt = ddt
         self.mt = int(mt)
-        self.xmsg = xmsg.decode('irahex') if self.mt == 3 else xmsg
+        self.xmsg = decode_irahex(xmsg) if self.mt == 3 else xmsg
 
     def __str__(self):
-        msg = self.xmsg.encode('irahex') if self.mt == 3 else self.xmsg
+        msg = encode_irahex(self.xmsg) if self.mt == 3 else self.xmsg
         ln = self.data_len(self.rad, self.oadc, self.ac, self.dd, self.ddt,
                            self.mt, msg) + 9
         text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
@@ -230,10 +221,10 @@ class Request30(Message):
         self.dd = dd
         self.ddt = ddt
         self.vp = vp
-        self.amsg = amsg.decode('irahex') if encoded else amsg
+        self.amsg = decode_irahex(amsg) if encoded else amsg
 
     def __str__(self):
-        msg = self.amsg.encode('irahex')
+        msg = encode_irahex(self.amsg)
         ln = self.data_len(self.adc, self.oadc, self.ac, self.nrq, self.nad,
                            self.npid, self.dd, self.ddt, self.vp, msg)
         text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
@@ -277,12 +268,11 @@ class Request5x(Message):
                  vp='', rpid='', scts='', dst='', rsn='', dscts='', mt=None,
                  nb='', xmsg='', mms='', pr='', dcs='', mcls='', rpi='', cpg='',
                  rply='', otoa='', hplmn='', xser='', encoded=True):
-        Message.__init__(self)
         self.trn = self.TRN.next() if trn is None else int(trn)
         self.ot = int(ot)
         self.adc = adc
         if encoded and otoa == '5039':
-            self.oadc = oadc.decode('bits7')
+            self.oadc = decode_bits7(oadc)
             self.otoa = otoa
         else:
             self.oadc = oadc
@@ -325,14 +315,12 @@ class Request5x(Message):
         self.mt = '' if mt == '' else int(mt)
         self.nb = nb
         if encoded:
-            if self.mt == 2:
-                self.xmsg = xmsg
-            elif self.mt == 3:
-                self.xmsg = xmsg.decode('irahex')
-            elif self.mt == 4:
-                self.xmsg = xmsg.decode('hex')
+            if self.mt == 3:
+                self.xmsg = decode_irahex(xmsg)
             elif self.mt == '':
                 self.xmsg = ''
+            else:
+                self.xmsg = xmsg
         else:
             self.xmsg = xmsg
         self.mms = mms
@@ -346,31 +334,32 @@ class Request5x(Message):
         self.xser = xser
 
     def __str__(self):
-        oadc = self.oadc.encode('bits7') if self.otoa == '5039' else self.oadc
+        oadc = encode_bits7(self.oadc) if self.otoa == '5039' else self.oadc
+        otoa = '' if self.otoa == '5039' else self.otoa
         try:
-            str(self.xmsg)
-        except UnicodeEncodeError:
+            self.xmsg.encode('ascii')
+        except UnicodeError:
             self.mt = 4
             self.xser = '020108'
         if self.mt == 2:
             msg = self.xmsg
         elif self.mt == 3:
-            msg = self.xmsg.encode('irahex')
+            msg = encode_irahex(self.xmsg)
         else:
             if self.xser == '020108':
                 msg = self.xmsg.encode('utf-16')
                 self.nb = len(msg) * 8
-                msg = msg.encode('hex').upper()
+                msg = encode_hex(msg)
             else:
-                self.nb = len(self.xmsg)
-                msg = self.xmsg.encode('hex').upper()
+                self.nb = len(self.xmsg) << 2 or ''
+                msg = self.xmsg
         ln = self.data_len(
             self.adc, oadc, self.ac, self.nrq, self.nadc, self.nt,
             self.npid, self.lrq, self.lrad, self.lpid, self.dd, self.ddt,
             self.vp, self.rpid, self.scts, self.dst, self.rsn,
             self.dscts, self.mt, self.nb, msg, self.mms, self.pr,
             self.dcs, self.mcls, self.rpi, self.cpg, self.rply,
-            self.otoa, self.hplmn, self.xser, '',
+            otoa, self.hplmn, self.xser, '',
             '')
         text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
                '{}/{}/{}/{}/{}/{}/{}/{}/{}/{}/' \
@@ -383,7 +372,7 @@ class Request5x(Message):
                    self.vp, self.rpid, self.scts, self.dst, self.rsn,
                    self.dscts, self.mt, self.nb, msg, self.mms, self.pr,
                    self.dcs, self.mcls, self.rpi, self.cpg, self.rply,
-                   self.otoa, self.hplmn, self.xser)
+                   otoa, self.hplmn, self.xser)
         return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
 
     @classmethod
@@ -404,8 +393,8 @@ class Request6x(Message):
         self.onpi = onpi  # 1 3 5 ''
         self.styp = styp  # 1 2 3 4 5 6
         if encoded:
-            self.pwd = pwd.decode('irahex')
-            self.npwd = npwd.decode('irahex')
+            self.pwd = decode_irahex(pwd)
+            self.npwd = decode_irahex(npwd)
             self.vers = int(vers, 2)
         else:
             self.pwd = pwd
@@ -417,8 +406,8 @@ class Request6x(Message):
         self.opid = opid  # 00 39 ''
 
     def __str__(self):
-        pwd = self.pwd.encode('irahex')
-        npwd = self.npwd.encode('irahex')
+        pwd = encode_irahex(self.pwd)
+        npwd = encode_irahex(self.npwd)
         vers = '{:0>4b}'.format(self.vers)
         ln = self.data_len(
             self.oadc, self.oton, self.onpi, self.styp, pwd, npwd,
@@ -438,13 +427,14 @@ class Request6x(Message):
 
 
 class DataTransport(object):
-    def __init__(self, host, port, timeout=3):
+    def __init__(self, host, port, timeout=3, rcv=None):
         self.conn = self._Connection(host, port, timeout)
-        self.incoming = Queue.Queue()
-        self.outgoing = Queue.Queue()
+        self.incoming = queue.Queue()
+        self.outgoing = queue.Queue()
         self.flag = threading.Event()
         self.sender = self.Worker(self.conn, self.outgoing, self.flag, True)
-        self.receiver = self.Worker(self.conn, self.incoming, self.flag, False)
+        self.receiver = self.Worker(self.conn, self.incoming, self.flag, False,
+                                    rcv)
         self.receiver.start()
         self.sender.start()
 
@@ -454,7 +444,7 @@ class DataTransport(object):
     def receive(self):
         try:
             return self.incoming.get_nowait()
-        except Queue.Empty:
+        except queue.Empty:
             return None
 
     def quit(self):
@@ -464,21 +454,22 @@ class DataTransport(object):
         self.receiver.join()
 
     class Worker(threading.Thread):
-        def __init__(self, conn, queue, flag, out):
+        def __init__(self, conn, queue, flag, out, callback=None):
             threading.Thread.__init__(self)
             self.conn = conn
             self.queue = queue
             self.flag = flag
             self.run = self.send if out else self.receive
+            self.callback = callback
 
         def send(self):
             while not self.flag.is_set():
                 try:
                     msg = self.queue.get(timeout=1)
-                except Queue.Empty:
+                except queue.Empty:
                     pass
                 else:
-                    send = self.conn.send(msg)
+                    send = self.conn.send(msg.encode())
                     if not send:
                         self.queue.put(msg)
 
@@ -487,12 +478,15 @@ class DataTransport(object):
             while not self.flag.is_set():
                 msg = self.conn.receive()
                 if msg is not None:
-                    buff += msg
+                    buff += msg.decode()
                     sid = 0
                     try:
                         while True:
                             eid = buff.index(ETX, sid) + 1
-                            self.queue.put(buff[sid:eid])
+                            try:
+                                self.callback(buff[sid:eid])
+                            except TypeError:
+                                self.queue.put(buff[sid:eid])
                             sid = eid
                     except ValueError:
                         buff = buff[sid:]
