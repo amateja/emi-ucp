@@ -3,6 +3,7 @@ import threading
 import types
 
 from .utils import *
+
 try:
     import Queue as queue
 except ImportError:
@@ -471,7 +472,7 @@ class DataTransport(object):
                 else:
                     send = self.conn.send(msg.encode())
                     if not send:
-                        self.queue.put(msg)
+                        self.queue.put(msg)  # pragma: no cover
 
         def receive(self):
             buff = ''
@@ -505,23 +506,23 @@ class DataTransport(object):
         def send(self, msg):
             try:
                 nob = self.socket.sendall(msg)
-            except socket.error:
+            except socket.error:  # pragma: no cover
                 self._reconnect()
                 return False
             if nob is None:
                 return True
-            self._reconnect()
-            return False
+            self._reconnect()  # pragma: no cover
+            return False  # pragma: no cover
 
         def receive(self):
             try:
                 msg = self.socket.recv(4096)
             except socket.timeout:
-                return None
+                return None  # pragma: no cover
             except socket.error:
                 self._reconnect()
                 return None
-            if not msg:
+            if not msg:  # pragma: no cover
                 self._reconnect()
                 return None
             return msg

@@ -196,15 +196,18 @@ def encode_hex(_in):
     if isinstance(_in, six.binary_type):
         return codecs.decode(codecs.encode(_in, 'hex_codec').upper(), 'utf-8')
     try:
-        return codecs.decode(codecs.encode(bytes(_in.encode('latin-1')), 'hex_codec').upper(), 'utf-8')
+        return codecs.decode(codecs.encode(
+            bytes(_in.encode('latin-1')), 'hex_codec').upper(), 'utf-8')
     except UnicodeError:
-        return codecs.decode(codecs.encode(bytes(_in.encode('utf-8')), 'hex_codec').upper(), 'utf-8')
+        return codecs.decode(codecs.encode(
+            bytes(_in.encode('utf-8')), 'hex_codec').upper(), 'utf-8')
 
 
 def decode_hex(_in):
     if isinstance(_in, six.binary_type):
         return codecs.decode(codecs.decode(_in, 'hex_codec'), 'utf-8')
-    return codecs.decode(codecs.decode(_in.encode('utf-8'), 'hex_codec'), 'utf-8')
+    return codecs.decode(codecs.decode(
+        _in.encode('utf-8'), 'hex_codec'), 'utf-8')
 
 
 def encode_irahex(_in):
