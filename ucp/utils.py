@@ -186,7 +186,7 @@ def decode_ira(input_):
             if c == '\x1b' and i < length:
                 translator = decode_extension
                 continue
-            raise UnicodeError('Unrecognized GSM character: {}.'.format(c))
+            raise UnicodeError('Unrecognized GSM character: {0}.'.format(c))
         else:
             translator = decode_base
     return result

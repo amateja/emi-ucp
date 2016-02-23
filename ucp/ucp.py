@@ -2,7 +2,8 @@ import socket
 import threading
 import types
 
-from .utils import *
+from .utils import encode_bits7, decode_bits7, encode_irahex, decode_irahex, \
+    encode_hex
 
 try:
     import Queue as queue
@@ -33,7 +34,7 @@ class Trn(object):
         if not Trn.instance:
             Trn.instance = Trn.__Trn()
 
-    def next(self):
+    def next_trn(self):
         self.instance.val = (self.instance.val + 1) % 100
         return self.instance.val
 
@@ -60,14 +61,14 @@ class Message(object):
         msg = msg.split(SEP)
         t_ln = int(msg[1])
         if t_ln != ln:
-            raise FrameMalformed('Message is %d long, but %d declared. %s'
-                                 % (ln, t_ln, msg[3]))
-        if x != O and x != R:
+            raise FrameMalformed('Message is {0} long, but {1} declared. {2}'
+                                 .format(ln, t_ln, msg[3]))
+        if x not in [O, R]:
             raise ValueError('Message can be either operation or response.')
 
         if x != msg[2]:
-            raise FrameMalformed('Message is not a %s.' % 'operation' if x == O
-                                 else 'response')
+            raise FrameMalformed('Message is not a {}.'.format(
+                'operation' if x == O else 'response'))
         t_checksum = int(msg[-1], 16)
         if t_checksum != Message.checksum(SEP.join(msg[:-1]) + SEP):
             raise FrameMalformed('Checksum does not comply.')
@@ -96,20 +97,20 @@ class Response(Message):
 
         self.ot = ot
         self.ack = ack
-        self.trn = self.TRN.next() if trn is None else trn
+        self.trn = self.TRN.next_trn() if trn is None else trn
         self.mvp_ec = mvp_ec
         self.sm = sm
 
     def __str__(self):
         if self.ack == A and self.ot in (1, 2, 3, 31, 60, 61):
             ln = self.data_len(self.ack, self.sm)
-            text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/{}/{}/'.format(
+            text = '{0:0>2d}/{1:0>5d}/{2}/{3:0>2d}/{4}/{5}/'.format(
                 self.trn, ln, R, self.ot, self.ack, self.sm)
         else:
             ln = self.data_len(self.ack, self.mvp_ec, self.sm)
-            text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/{}/{}/{}/'.format(
+            text = '{0:0>2d}/{1:0>5d}/{2}/{3:0>2d}/{4}/{5}/{6}/'.format(
                 self.trn, ln, R, self.ot, self.ack, self.mvp_ec, self.sm)
-        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+        return STX + text + '{0:0>2X}'.format(self.checksum(text)) + ETX
 
     @classmethod
     def from_string(cls, msg):
@@ -122,7 +123,7 @@ class Response(Message):
 class Request01(Message):
     def __init__(self, ot=1, trn=None, adc='', oadc='', ac='', mt='', xmsg=''):
         Message.__init__(self)
-        self.trn = self.TRN.next() if trn is None else int(trn)
+        self.trn = self.TRN.next_trn() if trn is None else int(trn)
         self.ot = int(ot)
         self.adc = adc
         self.oadc = oadc
@@ -133,11 +134,11 @@ class Request01(Message):
     def __str__(self):
         msg = encode_irahex(self.xmsg) if self.mt == 3 else self.xmsg
         ln = self.data_len(self.adc, self.oadc, self.ac, self.mt, msg)
-        text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
-               '{}/{}/{}/{}/{}/'.format(
+        text = '{0:0>2d}/{1:0>5d}/{2}/{3:0>2d}/' \
+               '{4}/{5}/{6}/{7}/{8}/'.format(
                    self.trn, ln, O, self.ot,
                    self.adc, self.oadc, self.ac, self.mt, msg)
-        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+        return STX + text + '{0:0>2X}'.format(self.checksum(text)) + ETX
 
     @classmethod
     def from_string(cls, msg):
@@ -149,7 +150,7 @@ class Request02(Message):
     def __init__(self, ot=2, trn=None, npl='', rads='', oadc='', ac='', mt='',
                  xmsg=''):
         Message.__init__(self)
-        self.trn = self.TRN.next() if trn is None else int(trn)
+        self.trn = self.TRN.next_trn() if trn is None else int(trn)
         self.ot = int(ot)
         self.npl = int(npl)
         self.rads = rads
@@ -162,11 +163,11 @@ class Request02(Message):
         msg = encode_irahex(self.xmsg) if self.mt == 3 else self.xmsg
         rads = SEP.join(self.rads)
         ln = self.data_len(self.npl, rads, self.oadc, self.ac, self.mt, msg)
-        text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
-               '{}/{}/{}/{}/{}/{}/'.format(
+        text = '{0:0>2d}/{1:0>5d}/{2}/{3:0>2d}/' \
+               '{4}/{5}/{6}/{7}/{8}/{9}/'.format(
                    self.trn, ln, O, self.ot,
                    self.npl, rads, self.oadc, self.ac, self.mt, msg)
-        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+        return STX + text + '{0:0>2X}'.format(self.checksum(text)) + ETX
 
     @classmethod
     def from_string(cls, msg):
@@ -179,7 +180,7 @@ class Request03(Message):
     def __init__(self, ot=3, trn=None, rad='', oadc='', ac='', dd='', ddt='',
                  mt='', xmsg=''):
         Message.__init__(self)
-        self.trn = self.TRN.next() if trn is None else int(trn)
+        self.trn = self.TRN.next_trn() if trn is None else int(trn)
         self.ot = int(ot)
         self.rad = rad
         self.oadc = oadc
@@ -193,12 +194,12 @@ class Request03(Message):
         msg = encode_irahex(self.xmsg) if self.mt == 3 else self.xmsg
         ln = self.data_len(self.rad, self.oadc, self.ac, self.dd, self.ddt,
                            self.mt, msg) + 9
-        text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
-               '{}/{}/{}/0////////{}/{}/{}/{}/'.format(
+        text = '{0:0>2d}/{1:0>5d}/{2}/{3:0>2d}/' \
+               '{4}/{5}/{6}/0////////{7}/{8}/{9}/{10}/'.format(
                    self.trn, ln, O, self.ot,
                    self.rad, self.oadc, self.ac, self.dd, self.ddt, self.mt,
                    msg)
-        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+        return STX + text + '{0:0>2X}'.format(self.checksum(text)) + ETX
 
     @classmethod
     def from_string(cls, msg):
@@ -211,7 +212,7 @@ class Request30(Message):
     def __init__(self, ot=30, trn=None, adc='', oadc='', ac='', nrq='', nad='',
                  npid='', dd='', ddt='', vp='', amsg='', encoded=True):
         Message.__init__(self)
-        self.trn = self.TRN.next() if trn is None else int(trn)
+        self.trn = self.TRN.next_trn() if trn is None else int(trn)
         self.ot = int(ot)
         self.adc = adc
         self.oadc = oadc
@@ -228,12 +229,12 @@ class Request30(Message):
         msg = encode_irahex(self.amsg)
         ln = self.data_len(self.adc, self.oadc, self.ac, self.nrq, self.nad,
                            self.npid, self.dd, self.ddt, self.vp, msg)
-        text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
-               '{}/{}/{}/{}/{}/{}/{}/{}/{}/{}/'.format(
+        text = '{0:0>2d}/{1:0>5d}/{2}/{3:0>2d}/' \
+               '{4}/{5}/{6}/{7}/{8}/{9}/{10}/{11}/{12}/{13}/'.format(
                    self.trn, ln, O, self.ot,
                    self.adc, self.oadc, self.ac, self.nrq, self.nad, self.npid,
                    self.dd, self.ddt, self.vp, msg)
-        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+        return STX + text + '{0:0>2X}'.format(self.checksum(text)) + ETX
 
     @classmethod
     def from_string(cls, msg):
@@ -244,18 +245,18 @@ class Request30(Message):
 class Request31(Message):
     def __init__(self, ot=31, trn=None, adc='', pid=''):
         Message.__init__(self)
-        self.trn = self.TRN.next() if trn is None else int(trn)
+        self.trn = self.TRN.next_trn() if trn is None else int(trn)
         self.ot = int(ot)
         self.adc = adc
         self.pid = pid
 
     def __str__(self):
         ln = self.data_len(self.adc, self.pid)
-        text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
-               '{}/{}/'.format(
+        text = '{0:0>2d}/{1:0>5d}/{2}/{3:0>2d}/' \
+               '{4}/{5}/'.format(
                    self.trn, ln, O, self.ot,
                    self.adc, self.pid)
-        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+        return STX + text + '{0:0>2X}'.format(self.checksum(text)) + ETX
 
     @classmethod
     def from_string(cls, msg):
@@ -269,7 +270,7 @@ class Request5x(Message):
                  vp='', rpid='', scts='', dst='', rsn='', dscts='', mt=None,
                  nb='', xmsg='', mms='', pr='', dcs='', mcls='', rpi='', cpg='',
                  rply='', otoa='', hplmn='', xser='', encoded=True):
-        self.trn = self.TRN.next() if trn is None else int(trn)
+        self.trn = self.TRN.next_trn() if trn is None else int(trn)
         self.ot = int(ot)
         self.adc = adc
         if encoded and otoa == '5039':
@@ -362,11 +363,11 @@ class Request5x(Message):
             self.dcs, self.mcls, self.rpi, self.cpg, self.rply,
             otoa, self.hplmn, self.xser, '',
             '')
-        text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
-               '{}/{}/{}/{}/{}/{}/{}/{}/{}/{}/' \
-               '{}/{}/{}/{}/{}/{}/{}/{}/{}/{}/' \
-               '{}/{}/{}/{}/{}/{}/{}/{}/{}/{}/' \
-               '{}///'.format(
+        text = '{0:0>2d}/{1:0>5d}/{2}/{3:0>2d}/' \
+               '{4}/{5}/{6}/{7}/{8}/{9}/{10}/{11}/{12}/{13}/' \
+               '{14}/{15}/{16}/{17}/{18}/{19}/{20}/{21}/{22}/{23}/' \
+               '{24}/{25}/{26}/{27}/{28}/{29}/{30}/{31}/{32}/{33}/' \
+               '{34}///'.format(
                    self.trn, ln, O, self.ot,
                    self.adc, oadc, self.ac, self.nrq, self.nadc, self.nt,
                    self.npid, self.lrq, self.lrad, self.lpid, self.dd, self.ddt,
@@ -374,7 +375,7 @@ class Request5x(Message):
                    self.dscts, self.mt, self.nb, msg, self.mms, self.pr,
                    self.dcs, self.mcls, self.rpi, self.cpg, self.rply,
                    otoa, self.hplmn, self.xser)
-        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+        return STX + text + '{0:0>2X}'.format(self.checksum(text)) + ETX
 
     @classmethod
     def from_string(cls, msg):
@@ -387,7 +388,7 @@ class Request6x(Message):
                  npwd='', vers='', ladc='', lton='', lnpi='', opid='',
                  encoded=True):
         Message.__init__(self)
-        self.trn = self.TRN.next() if trn is None else int(trn)
+        self.trn = self.TRN.next_trn() if trn is None else int(trn)
         self.ot = int(ot)
         self.oadc = oadc
         self.oton = oton  # 1 2 6 ''
@@ -409,17 +410,17 @@ class Request6x(Message):
     def __str__(self):
         pwd = encode_irahex(self.pwd)
         npwd = encode_irahex(self.npwd)
-        vers = '{:0>4b}'.format(self.vers)
+        vers = '{0:0>4b}'.format(self.vers)
         ln = self.data_len(
             self.oadc, self.oton, self.onpi, self.styp, pwd, npwd,
             vers, self.ladc, self.lton, self.lnpi, self.opid, '')
-        text = '{:0>2d}/{:0>5d}/{}/{:0>2d}/' \
-               '{}/{}/{}/{}/{}/{}/{}/{}/{}/{}/' \
-               '{}//'.format(
+        text = '{0:0>2d}/{1:0>5d}/{2}/{3:0>2d}/' \
+               '{4}/{5}/{6}/{7}/{8}/{9}/{10}/{11}/{12}/{13}/' \
+               '{14}//'.format(
                    self.trn, ln, O, self.ot,
                    self.oadc, self.oton, self.onpi, self.styp, pwd, npwd,
                    vers, self.ladc, self.lton, self.lnpi, self.opid)
-        return STX + text + '{:0>2X}'.format(self.checksum(text)) + ETX
+        return STX + text + '{0:0>2X}'.format(self.checksum(text)) + ETX
 
     @classmethod
     def from_string(cls, msg):

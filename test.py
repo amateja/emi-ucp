@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
+import six
+import socket
+import threading
 import unittest
 
-from ucp import *
+from ucp import Response, Request01, Request02, Request03, Request30, \
+    Request31, Request5x, Request6x, dispatcher, send_message, Message, O, \
+    encode_bits7, decode_bits7, DataTransport, encode_ira, decode_ira, encode_hex, decode_hex
 
 
 class TestMessage(unittest.TestCase):
@@ -184,7 +189,7 @@ class TestMessage(unittest.TestCase):
         self.assertEqual(
             self.utf16,
             str(Request5x(ot=51, trn=0, adc='012345', oadc='09876', mt=4,
-                          xmsg=u'\u85c4', encoded=False)))
+                          xmsg=six.unichr(34244), encoded=False)))
 
     def test_Request5x_mt2(self):
         self.assertEqual(
@@ -243,7 +248,7 @@ class TestCoders(unittest.TestCase):
         self.assertEqual(encode_hex('€'), 'E282AC')
 
     def test_decode_hex_bytes(self):
-        self.assertEqual(decode_hex(b'E282AC'), u'€')
+        self.assertEqual(decode_hex(b'E282AC'), six.unichr(8364))  # €
 
 
 class UCPServer(threading.Thread):
