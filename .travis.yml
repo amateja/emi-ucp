@@ -9,7 +9,8 @@ python:
   - "3.5"
   - "pypy3"
 install:
-  pip install six coveralls
+  - if [[ $TRAVIS_PYTHON_VERSION == '3.2' ]]; then pip install 'coverage<4.0.0'; else pip install coverage; fi
+  - pip install six coveralls
 script:
   coverage run --source=ucp test.py
 after_success:
